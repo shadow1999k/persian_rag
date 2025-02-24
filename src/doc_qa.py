@@ -1,12 +1,13 @@
 # doc-qa.py
-from transformers import AutoModelForQuestionAnswering, AutoTokenizer
-from transformers import GenerationConfig
+
+from transformers import GenerationConfig,AutoModelForCausalLM,AutoTokenizer
 from PyPDF2 import PdfReader
+import pandas as pd
 import torch
 import faiss
 import numpy as np
 import logging
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 
 
 class DocumentQA:
@@ -28,12 +29,12 @@ class DocumentQA:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
 
-        embedding_model_name ="all-MiniLM-L6-v2" # "LABSE"  #
+        embedding_model_name = "LABSE"  # "all-MiniLM-L6-v2" #
         self.embedder = SentenceTransformer(embedding_model_name).to(self.device)
         print(f'loaded {embedding_model_name} embedder')
 
-        model_name = "bert-base-multilingual-cased" # "MehdiHosseiniMoghadam/AVA-Mistral-7B-V2"  #
-        self.model = AutoModelForQuestionAnswering.from_pretrained(model_name).to(self.device)
+        model_name = "MehdiHosseiniMoghadam/AVA-Mistral-7B-V2"  # "bert-base-multilingual-cased"  #
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         # Check if the model is generative (e.g., Mistral)
@@ -49,6 +50,17 @@ class DocumentQA:
             self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
             self.model.resize_token_embeddings(len(self.tokenizer))  # Resize model embeddings
         print(f'loaded {model_name} model & tokenizer')
+
+    def temp_chunked_input_data(self):
+        return pd.Series(
+            data=["آب در دمای صفر درجه یخ میزند"
+                , "هدیه مادر برای زهرا یک کفش بود"
+                ,  "رنگ مورد علاقه علی آبی است"
+                , "ز آنجایی که زهرا دانش آموزبا استعداد و درس خوانی است "
+                , "معدل نهایی او در پابه پنجم ابتدایی20بود"
+                , "زهرا در یک خانواده پنج نفره همراهمادر و پدر و خواهرش سارا و برادرشعلی زندگی میکند"],
+
+        )
 
     def extract_text_from_pdf(self, pdf_file):
         """Extract text from a PDF file."""
@@ -83,14 +95,14 @@ class DocumentQA:
         inputs = self.tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True).to(
             self.device)
 
-        # generation_config = GenerationConfig(
-        #     do_sample=True,
-        #     top_k=1,
-        #     temperature=0.99,
-        #     max_new_tokens=900,
-        #     pad_token_id=self.tokenizer.eos_token_id
-        # )
-        outputs = self.model(**inputs) #, generation_config=generation_config
+        generation_config = GenerationConfig(
+            do_sample=True,
+            top_k=1,
+            temperature=0.99,
+            max_new_tokens=900,
+            pad_token_id=self.tokenizer.eos_token_id
+        )
+        outputs = self.model(**inputs, generation_config=generation_config)  # ,
         answer_start = torch.argmax(outputs.start_logits)
         answer_end = torch.argmax(outputs.end_logits) + 1
         answer = self.tokenizer.convert_tokens_to_string(
@@ -104,9 +116,62 @@ class DocumentQA:
         chunk_embeddings = self.embedder.encode(self.text_chunks)
         self.index = self.create_faiss_index(chunk_embeddings)
 
-# if __name__ == "__main__":
-#     print('ok')
-#     doc_processor = DocumentQA()
+    def search(self, inp_question, num_res):
+        res = {}
+        # start_time = time.time()
+        question_embedding = self.embedder.encode(inp_question, convert_to_tensor=True)
+        hits = util.semantic_search(question_embedding, corpus_embeddings)
+        # end_time = time.time()
+        hits = hits[0]  # Get the hits for the first query
+
+        print("Input question:", inp_question)
+        # print("Results (after {:.3f} seconds):".format(end_time - start_time))
+        all_input_chunks = self.temp_chunked_input_data()
+        for hit in hits[0:num_res]:
+            res[hit['corpus_id']] = all_input_chunks[hit['corpus_id']]
+        df = pd.DataFrame(list(res.items()), columns=['id', 'res'])
+        return df
+
+
+if __name__ == "__main__":
+    print('ok')
+    doc_processor = DocumentQA()
+    doc_processor.load_model()
+    data_chunks = doc_processor.temp_chunked_input_data()
+
+    corpus_embeddings = doc_processor.embedder.encode(data_chunks, show_progress_bar=True, convert_to_tensor=True)
+
+    # doc_processor.create_faiss_index(corpus_embeddings)
+    print('ok')
+    q = "هدیه مادر برای زهرا چه بود؟"
+    res = doc_processor.search(inp_question=q, num_res=1)
+    # question_embedding = doc_processor.embedder.encode("زهرا در خانواده چند نفره زندگی میکند ؟", convert_to_tensor=True)
+    # hits = util.semantic_search(question_embedding, corpus_embeddings)
+    print('ok')
+    prompt = f'''
+
+    با توجه به شرایط زیر به این سوال در یک کلمه پاسخ دهید:
+
+    {q},
+
+    متن نوشته: {res['res'][0]} 
+
+    '''
+    prompt = f"### Human:{prompt}\n### Assistant:"
+
+    inputs = doc_processor.tokenizer(prompt, return_tensors="pt").to("cuda")
+
+    generation_config = GenerationConfig(
+        do_sample=True,
+        top_k=1,
+        temperature=0.99,
+        max_new_tokens=900,
+        pad_token_id=doc_processor.tokenizer.eos_token_id
+    )
+
+    outputs = doc_processor.model.generate(**inputs, generation_config=generation_config)
+    print(doc_processor.tokenizer.decode(outputs[0], skip_special_tokens=True))
+
 #     doc_processor.load_model()
 #     print("loaded model and tokenizer.")
 # import faiss

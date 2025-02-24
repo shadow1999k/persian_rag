@@ -1,3 +1,4 @@
+
 # app.py
 import streamlit as st
 from doc_qa import DocumentQA
@@ -39,7 +40,7 @@ if st.session_state.document_initialized:
             st.write("---")
 else:
     st.warning("Please upload a PDF file to start.")
-
+###########################################################
 # import streamlit as st
 # from transformers import AutoModelForQuestionAnswering, AutoTokenizer
 # from PyPDF2 import PdfReader
