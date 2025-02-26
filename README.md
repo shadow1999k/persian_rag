@@ -17,7 +17,7 @@
 8- hyperparameters optimization
 
 ----------------------------------------------------------------------------
-## Key capabilities required for effective RAG
+## Key capabilities required for effective RAG (based on ![paper](https://arxiv.org/pdf/2501.04858v1) )
 - noise robustness
 - negative rejection
 - information integration
