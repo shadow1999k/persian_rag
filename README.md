@@ -1,8 +1,10 @@
 # Table of contents
+0. [paper 1](https://arxiv.org/pdf/2501.04858v1)
 1. [RAG system elements](#RAG_system_elements)
 2. [Key capabilities required for effective RAG](#second)
 3. [Evaluation Datasets](#third)
-4. [Best LLMs (as baseline)](#fourth)
+4. [Embedding Model Evaluation](#fourth)
+5. [Best LLMs (as baseline)](#fifth)
 
 ## RAG system elements :  <a name="RAG_system_elements"></a>
  
@@ -63,8 +65,21 @@ references
 | Header      | Title       |
 | Paragraph   | Text        |
 
-## Best LLMs (as baseline) <a name="fourth"></a>
 
+## Embedding Model Evaluation <a name="fourth"></a>
+- MatinaSRoberta
+- LaBSE[17]
+- L12-V2
+- Qwen2-7[18]
+- Alibaba/gte
+
+The models chosen are compatible with the Sentence-Transformers framework, ensuring support for creating high-quality sentence embeddings.
+
+
+## Best LLMs (as baseline) <a name="fifth"></a>
+The capabilities of the LLMs were evaluated using a Multiple-Choice Question Answering
+(MCQA), built on the LlamaIndex framework, which was applied to each of the three datasets
+(mentioned above)
 - LLaMA 3.1 (8B & 70B)
 - Qwen 2 (7B & 72B)
 - Gemma 1.1, and Gemma 2
