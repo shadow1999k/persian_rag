@@ -1,4 +1,9 @@
-## RAG system elements : 
+# Table of contents
+1. [RAG system elements](#RAG_system_elements)
+2. [Key capabilities required for effective RAG](#second)
+3. [Evaluation Datasets](#third)
+
+## RAG system elements :  <a name="RAG_system_elements"></a>
  
 1- embedding model selection
 
@@ -17,13 +22,13 @@
 8- hyperparameters optimization
 
 ----------------------------------------------------------------------------
-## Key capabilities required for effective RAG (based on ![paper](https://arxiv.org/pdf/2501.04858v1) )
+## Key capabilities required for effective RAG (based on ![paper](https://arxiv.org/pdf/2501.04858v1) ) <a name="second"></a>
 - noise robustness
 - negative rejection
 - information integration
 - counterfactual robustness
 ------------------------------------------------------------------------------
-## Evaluation Datasets: 
+## Evaluation Datasets: <a name="third"></a>
 1- General Knowledge Dataset 
 
 PQuad, a Persian-language reading
@@ -48,7 +53,17 @@ Iranian education system by the year 1404 (2025). This document contains structu
 language, along with socio-political and cultural terminology, making it an important test case for
 evaluating how well models can retrieve and generate information from highly formalized and
 context-specific texts.
-MCQs generated from this document using GPT-4o assessed the models'
+MCQs (Multiple-Choice Question) generated from this document using GPT-4o assessed the models'
 ability to process lengthy, policy-oriented texts with intricate cultural and organizational
 references
 
+| Syntax      | Description |
+| ----------- | ----------- |
+| Header      | Title       |
+| Paragraph   | Text        |
+
+## Best LLMs (as baseline)
+
+- LLaMA 3.1 (8B & 70B)
+- Qwen 2 (7B & 72B)
+- Gemma 1.1, and Gemma 2
