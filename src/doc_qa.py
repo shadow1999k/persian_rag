@@ -1,6 +1,9 @@
 # doc-qa.py
+import re
+import subprocess
+from hazm import Normalizer, sent_tokenize
 
-from transformers import GenerationConfig,AutoModelForCausalLM,AutoTokenizer
+from transformers import GenerationConfig, AutoModelForCausalLM, AutoTokenizer
 from PyPDF2 import PdfReader
 import pandas as pd
 import torch
@@ -55,20 +58,51 @@ class DocumentQA:
         return pd.Series(
             data=["آب در دمای صفر درجه یخ میزند"
                 , "هدیه مادر برای زهرا یک کفش بود"
-                ,  "رنگ مورد علاقه علی آبی است"
+                , "رنگ مورد علاقه علی آبی است"
                 , "ز آنجایی که زهرا دانش آموزبا استعداد و درس خوانی است "
                 , "معدل نهایی او در پابه پنجم ابتدایی20بود"
                 , "زهرا در یک خانواده پنج نفره همراهمادر و پدر و خواهرش سارا و برادرشعلی زندگی میکند"],
 
         )
 
+    def pdf_to_pure_text(self, pdf_file, output_txt):
+        # Use pdftotext to extract text from the PDF
+        subprocess.run(["pdftotext", "-layout", pdf_file, output_txt], check=True)
+
     def extract_text_from_pdf(self, pdf_file):
         """Extract text from a PDF file."""
-        reader = PdfReader(pdf_file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
+        temp_txt = "temp_output.txt"
+        self.pdf_to_pure_text(pdf_file, temp_txt)
+
+        # Step 2: Read the extracted text
+        with open(temp_txt, "r", encoding="utf-8") as file:
+            extracted_text = file.read()
+
+        # Step 3: Clean the text
+        cleaned_text = self.clean_text(extracted_text)
+
+        # Step 4: Normalize the text
+        normalized_text = self.normalize_text(cleaned_text)
+
+        # Step 5: Chunk the text into sentences
+        sentences = self.chunk_text_into_sentences(normalized_text)
+        return sentences
+
+    def clean_text(self, text):
+        # Remove Unicode control characters (RLE, LRE, PDF, etc.)
+        text = re.sub(r"[\u200E\u200F\u202A-\u202E]", "", text)
+        # Remove extra spaces and newlines
+        text = re.sub(r"\s+", " ", text).strip()
         return text
+
+    def normalize_text(self, text):
+        # Normalize Persian text using hazm
+        normalizer = Normalizer()
+        return normalizer.normalize(text)
+
+    def chunk_text_into_sentences(self, text):
+        # Split the text into sentences using hazm
+        return sent_tokenize(text)
 
     def split_text_into_chunks(self, text, chunk_size=512):
         """Split text into smaller chunks for processing."""
@@ -126,9 +160,9 @@ class DocumentQA:
 
         print("Input question:", inp_question)
         # print("Results (after {:.3f} seconds):".format(end_time - start_time))
-        all_input_chunks = self.temp_chunked_input_data()
+        # all_input_chunks = self.extract_text_from_pdf()
         for hit in hits[0:num_res]:
-            res[hit['corpus_id']] = all_input_chunks[hit['corpus_id']]
+            res[hit['corpus_id']] = data_chunks[hit['corpus_id']]
         df = pd.DataFrame(list(res.items()), columns=['id', 'res'])
         return df
 
@@ -137,24 +171,24 @@ if __name__ == "__main__":
     print('ok')
     doc_processor = DocumentQA()
     doc_processor.load_model()
-    data_chunks = doc_processor.temp_chunked_input_data()
 
+    data_chunks = doc_processor.extract_text_from_pdf('./data/book.pdf')
     corpus_embeddings = doc_processor.embedder.encode(data_chunks, show_progress_bar=True, convert_to_tensor=True)
 
     # doc_processor.create_faiss_index(corpus_embeddings)
     print('ok')
-    q = "هدیه مادر برای زهرا چه بود؟"
+    q = "رنگ مورد علاقه علی چیست؟"
     res = doc_processor.search(inp_question=q, num_res=1)
     # question_embedding = doc_processor.embedder.encode("زهرا در خانواده چند نفره زندگی میکند ؟", convert_to_tensor=True)
     # hits = util.semantic_search(question_embedding, corpus_embeddings)
-    print('ok')
+
     prompt = f'''
 
-    با توجه به شرایط زیر به این سوال در یک کلمه پاسخ دهید:
+    با توجه به شرایط زیر به این سوال پاسخ دهید:
 
     {q},
 
-    متن نوشته: {res['res'][0]} 
+    متن نوشته: {res['res'][0]}
 
     '''
     prompt = f"### Human:{prompt}\n### Assistant:"
@@ -170,10 +204,31 @@ if __name__ == "__main__":
     )
 
     outputs = doc_processor.model.generate(**inputs, generation_config=generation_config)
-    print(doc_processor.tokenizer.decode(outputs[0], skip_special_tokens=True))
 
-#     doc_processor.load_model()
-#     print("loaded model and tokenizer.")
+    # Decode the generated text
+    full_output = doc_processor.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # Extract only the Assistant's answer
+    assistant_marker = "### Assistant:"
+
+    # Extract the Assistant's answer
+    if assistant_marker in full_output:
+        # Split the text at the Assistant marker and take the part after it
+        after_assistant = full_output.split(assistant_marker)[1]
+
+        # Find the first occurrence of '#' after the Assistant marker
+        end_index = after_assistant.find("#")
+
+        # If '#' is found, extract the text up to that point
+        if end_index != -1:
+            assistant_answer = after_assistant[:end_index].strip()
+        else:
+            # If no '#' is found, take the entire text after the Assistant marker
+            assistant_answer = after_assistant.strip()
+    else:
+        assistant_answer = "No Assistant answer found."
+    # Print the Assistant's answer
+    print(f'answer: {assistant_answer}')
+
 # import faiss
 # import numpy as np
 # import torch
