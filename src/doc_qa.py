@@ -125,22 +125,74 @@ class DocumentQA:
 
     def answer_question(self, question):
         """Answer a question based on the document."""
-        relevant_chunk = self.find_relevant_chunk(question)
-        inputs = self.tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True).to(
-            self.device)
+        q = "رنگ مورد علاقه علی چیست؟"
+        res = self.search(inp_question=question, num_res=1)
+        # question_embedding = doc_processor.embedder.encode("زهرا در خانواده چند نفره زندگی میکند ؟", convert_to_tensor=True)
+        # hits = util.semantic_search(question_embedding, corpus_embeddings)
+
+        prompt = f'''
+
+            با توجه به شرایط زیر به این سوال پاسخ دهید:
+
+            {q},
+
+            متن نوشته: {res['res'][0]}
+
+            '''
+        prompt = f"### Human:{prompt}\n### Assistant:"
+
+        inputs = self.tokenizer(prompt, return_tensors="pt").to("cuda")
 
         generation_config = GenerationConfig(
             do_sample=True,
             top_k=1,
             temperature=0.99,
             max_new_tokens=900,
-            pad_token_id=self.tokenizer.eos_token_id
+            pad_token_id=doc_processor.tokenizer.eos_token_id
         )
-        outputs = self.model(**inputs, generation_config=generation_config)  # ,
-        answer_start = torch.argmax(outputs.start_logits)
-        answer_end = torch.argmax(outputs.end_logits) + 1
-        answer = self.tokenizer.convert_tokens_to_string(
-            self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0][answer_start:answer_end]))
+
+        outputs = self.model.generate(**inputs, generation_config=generation_config)
+
+        # Decode the generated text
+        full_output = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Extract only the Assistant's answer
+        assistant_marker = "### Assistant:"
+
+        # Extract the Assistant's answer
+        if assistant_marker in full_output:
+            # Split the text at the Assistant marker and take the part after it
+            after_assistant = full_output.split(assistant_marker)[1]
+
+            # Find the first occurrence of '#' after the Assistant marker
+            end_index = after_assistant.find("#")
+
+            # If '#' is found, extract the text up to that point
+            if end_index != -1:
+                assistant_answer = after_assistant[:end_index].strip()
+            else:
+                # If no '#' is found, take the entire text after the Assistant marker
+                assistant_answer = after_assistant.strip()
+        else:
+            assistant_answer = "No Assistant answer found."
+        # Print the Assistant's answer
+        print(f'answer: {assistant_answer}')
+        return assistant_answer
+        # relevant_chunk = self.find_relevant_chunk(question)
+        # inputs = self.tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True).to(
+        #     self.device)
+        #
+        # generation_config = GenerationConfig(
+        #     do_sample=True,
+        #     top_k=1,
+        #     temperature=0.99,
+        #     max_new_tokens=900,
+        #     pad_token_id=self.tokenizer.eos_token_id
+        # )
+        # outputs = self.model(**inputs, generation_config=generation_config)  # ,
+        # answer_start = torch.argmax(outputs.start_logits)
+        # answer_end = torch.argmax(outputs.end_logits) + 1
+        # answer = self.tokenizer.convert_tokens_to_string(
+        #     self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0][answer_start:answer_end]))
         return answer
 
     def initialize_document(self, pdf_file):
@@ -155,15 +207,11 @@ class DocumentQA:
         # start_time = time.time()
         question_embedding = self.embedder.encode(inp_question, convert_to_tensor=True)
         hits = util.semantic_search(question_embedding, corpus_embeddings)
-        # end_time = time.time()
         hits = hits[0]  # Get the hits for the first query
-
-        print("Input question:", inp_question)
-        # print("Results (after {:.3f} seconds):".format(end_time - start_time))
-        # all_input_chunks = self.extract_text_from_pdf()
         for hit in hits[0:num_res]:
             res[hit['corpus_id']] = data_chunks[hit['corpus_id']]
         df = pd.DataFrame(list(res.items()), columns=['id', 'res'])
+        print(f'search --> done. chunk:{df}')
         return df
 
 
@@ -174,60 +222,12 @@ if __name__ == "__main__":
 
     data_chunks = doc_processor.extract_text_from_pdf('./data/book.pdf')
     corpus_embeddings = doc_processor.embedder.encode(data_chunks, show_progress_bar=True, convert_to_tensor=True)
-
+    print(f'answer: corpus embedding --> done')
     # doc_processor.create_faiss_index(corpus_embeddings)
-    print('ok')
     q = "رنگ مورد علاقه علی چیست؟"
-    res = doc_processor.search(inp_question=q, num_res=1)
-    # question_embedding = doc_processor.embedder.encode("زهرا در خانواده چند نفره زندگی میکند ؟", convert_to_tensor=True)
-    # hits = util.semantic_search(question_embedding, corpus_embeddings)
-
-    prompt = f'''
-
-    با توجه به شرایط زیر به این سوال پاسخ دهید:
-
-    {q},
-
-    متن نوشته: {res['res'][0]}
-
-    '''
-    prompt = f"### Human:{prompt}\n### Assistant:"
-
-    inputs = doc_processor.tokenizer(prompt, return_tensors="pt").to("cuda")
-
-    generation_config = GenerationConfig(
-        do_sample=True,
-        top_k=1,
-        temperature=0.99,
-        max_new_tokens=900,
-        pad_token_id=doc_processor.tokenizer.eos_token_id
-    )
-
-    outputs = doc_processor.model.generate(**inputs, generation_config=generation_config)
-
-    # Decode the generated text
-    full_output = doc_processor.tokenizer.decode(outputs[0], skip_special_tokens=True)
-    # Extract only the Assistant's answer
-    assistant_marker = "### Assistant:"
-
-    # Extract the Assistant's answer
-    if assistant_marker in full_output:
-        # Split the text at the Assistant marker and take the part after it
-        after_assistant = full_output.split(assistant_marker)[1]
-
-        # Find the first occurrence of '#' after the Assistant marker
-        end_index = after_assistant.find("#")
-
-        # If '#' is found, extract the text up to that point
-        if end_index != -1:
-            assistant_answer = after_assistant[:end_index].strip()
-        else:
-            # If no '#' is found, take the entire text after the Assistant marker
-            assistant_answer = after_assistant.strip()
-    else:
-        assistant_answer = "No Assistant answer found."
-    # Print the Assistant's answer
-    print(f'answer: {assistant_answer}')
+    print(f'qestion:{q}')
+    rag_answer = doc_processor.answer_question(q)
+    print(f'answer: {rag_answer}')
 
 # import faiss
 # import numpy as np
