@@ -107,18 +107,6 @@ class DocumentQA:
         # Split the text into sentences using hazm
         return sent_tokenize(text)
 
-    # def split_text_into_chunks(self, text, chunk_size=512):
-    #     """Split text into smaller chunks for processing."""
-    #     words = text.split()
-    #     chunks = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
-    #     return chunks
-
-    # def create_faiss_index(self, chunk_embeddings):
-    #     """Create a FAISS index for efficient similarity search."""
-    #     dimension = chunk_embeddings.shape[1]
-    #     index = faiss.IndexFlatL2(dimension)
-    #     index.add(np.array(chunk_embeddings))
-    #     return index
     def store_chunks_in_db(self, text_chunks):
         """Store document chunks in ChromaDB."""
         chunk_embeddings = self.embedder.encode(text_chunks, show_progress_bar=True)
@@ -139,8 +127,6 @@ class DocumentQA:
     def answer_question(self, question):
         """Answer a question based on the document."""
         res = self.find_relevant_chunk(question)
-        # question_embedding = doc_processor.embedder.encode("زهرا در خانواده چند نفره زندگی میکند ؟", convert_to_tensor=True)
-        # hits = util.semantic_search(question_embedding, corpus_embeddings)
 
         prompt = f'''
 
@@ -189,41 +175,11 @@ class DocumentQA:
         # Print the Assistant's answer
         print(f'answer: {assistant_answer}')
         return assistant_answer
-        # relevant_chunk = self.find_relevant_chunk(question)
-        # inputs = self.tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True).to(
-        #     self.device)
-        #
-        # generation_config = GenerationConfig(
-        #     do_sample=True,
-        #     top_k=1,
-        #     temperature=0.99,
-        #     max_new_tokens=900,
-        #     pad_token_id=self.tokenizer.eos_token_id
-        # )
-        # outputs = self.model(**inputs, generation_config=generation_config)  # ,
-        # answer_start = torch.argmax(outputs.start_logits)
-        # answer_end = torch.argmax(outputs.end_logits) + 1
-        # answer = self.tokenizer.convert_tokens_to_string(
-        #     self.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0][answer_start:answer_end]))
 
     def initialize_document(self, pdf_file):
         """Initialize the document by extracting text and creating embeddings."""
         self.text_chunks = self.extract_text_from_pdf(pdf_file)
         self.store_chunks_in_db(self.text_chunks)
-        # chunk_embeddings = self.embedder.encode(self.text_chunks)
-        # self.index = self.create_faiss_index(chunk_embeddings)
-
-    # def search(self, inp_question, num_res):
-    #     res = {}
-    #     # start_time = time.time()
-    #     question_embedding = self.embedder.encode(inp_question, convert_to_tensor=True)
-    #     hits = util.semantic_search(question_embedding, corpus_embeddings)
-    #     hits = hits[0]  # Get the hits for the first query
-    #     for hit in hits[0:num_res]:
-    #         res[hit['corpus_id']] = data_chunks[hit['corpus_id']]
-    #     df = pd.DataFrame(list(res.items()), columns=['id', 'res'])
-    #     print(f'search --> done. chunk:{df}')
-    #     return df
 
 
 if __name__ == "__main__":
@@ -232,10 +188,7 @@ if __name__ == "__main__":
     doc_processor.load_model()
 
     doc_processor.initialize_document('./data/book.pdf')
-    # data_chunks = doc_processor.extract_text_from_pdf('./data/book.pdf')
-    # corpus_embeddings = doc_processor.embedder.encode(data_chunks, show_progress_bar=True, convert_to_tensor=True)
-    # print(f'answer: corpus embedding --> done')
-    # doc_processor.create_faiss_index(corpus_embeddings)
+
     q = "رنگ مورد علاقه علی چیست؟"
     print(f'qestion:{q}')
     rag_answer = doc_processor.answer_question(q)
