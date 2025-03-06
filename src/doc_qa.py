@@ -18,7 +18,7 @@ class DocumentQA:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
-        self.collection = self.chroma_client.get_or_create_collection("doc_chunks")
+        self.collection = self.chroma_client.get_or_create_collection("demo_chunks")
 
     def load_model(self):
         """Load the QA model and tokenizer."""
@@ -79,6 +79,7 @@ class DocumentQA:
         results = self.collection.query(query_embeddings=question_embedding, n_results=1)
 
         for metadata in results["metadatas"][0]:
+            #print(f'###############selected_pdfs: {selected_pdfs},metadata pdf name:{metadata["pdf_name"]}')
             if not selected_pdfs or metadata["pdf_name"] in selected_pdfs:
                 return metadata["text"], metadata["pdf_name"]
 
@@ -86,6 +87,7 @@ class DocumentQA:
 
     def answer_question(self, question, selected_pdfs=None):
         """Generate an answer using the retrieved chunk."""
+        print(f'selected_pdfs:{selected_pdfs}')
         relevant_chunk, pdf_name = self.find_relevant_chunk(question, selected_pdfs)
 
         if not relevant_chunk:
@@ -130,19 +132,19 @@ class DocumentQA:
         return assistant_answer, pdf_name
 
 
-if __name__ == "__main__":
-    doc_processor = DocumentQA()
-    doc_processor.load_model()
-
-    # Example Usage: Store multiple PDFs
-    pdf_files = ["./data/book.pdf", "./data/book2.pdf"]
-    for pdf in pdf_files:
-        doc_processor.store_pdf_in_db(pdf)
-
-    # Example Usage: Query with selected PDFs
-    selected_pdfs = ["book2.pdf","book.pdf"]
-    question = "آیا علی و سارا تا به حال به آمازون رفته اند؟"
-    answer, source_pdf = doc_processor.answer_question(question, selected_pdfs)
-
-    print(f"Answer: {answer}")
-    print(f"Source PDF: {source_pdf}")
+# if __name__ == "__main__":
+#     doc_processor = DocumentQA()
+#     doc_processor.load_model()
+#
+#     # Example Usage: Store multiple PDFs
+#     pdf_files = ["./data/book.pdf", "./data/book2.pdf"]
+#     for pdf in pdf_files:
+#         doc_processor.store_pdf_in_db(pdf)
+#
+#     # Example Usage: Query with selected PDFs
+#     selected_pdfs = ["book2.pdf","book.pdf"]
+#     question = "آیا علی و سارا تا به حال به آمازون رفته اند؟"
+#     answer, source_pdf = doc_processor.answer_question(question, selected_pdfs)
+#
+#     print(f"Answer: {answer}")
+#     print(f"Source PDF: {source_pdf}")
