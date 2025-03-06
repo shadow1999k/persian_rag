@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  vector-db:
+    build:
+      context: .
+      dockerfile: Dockerfile.vector_db
+    volumes:
+      - ./chroma_db:/app/chroma_db
+    ports:
+      - "5000:5000"
+    restart: always
+
+  model-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.model
+    depends_on:
+      - vector-db
+    volumes:
+      - ~/.cache/huggingface/hub:/root/.cache/huggingface/hub  # Mount pre-downloaded models
+    ports:
+      - "5001:5001"
+    restart: always
+
+  ui-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    depends_on:
+      - model-service
+    volumes:
+      - ./src/data:/app/src/data   # Mount pdfs for document processing
+    ports:
+      - "5002:5002"
+    restart: always
