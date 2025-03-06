@@ -1,132 +1,196 @@
-
-# app.py
 import streamlit as st
+import os
 from doc_qa import DocumentQA
 
-# Initialize session state
-if "qa_system" not in st.session_state:
-    st.session_state.qa_system = DocumentQA()
-    st.session_state.qa_system.load_model()
-    st.session_state.chat_history = []
-    st.session_state.document_initialized = False
+# Initialize the RAG system and load models only ONCE
+st.title("📖 Persian Document QA")
+st.write("Upload PDF files, select which ones to search, and ask your question.")
 
-# Streamlit UI
-st.title("Document Q/A System")
-st.write("Upload a PDF and ask questions about its content.")
+# Load the model **once** before file uploads
+@st.cache_resource
+def initialize_rag_system():
+    doc_processor = DocumentQA()
+    doc_processor.load_model()  # Load models only once
+    return doc_processor
 
-# Upload PDF
-pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
-if pdf_file is not None and not st.session_state.document_initialized:
-    st.session_state.qa_system.initialize_document(pdf_file)
-    st.session_state.document_initialized = True
-    st.success("PDF uploaded and processed successfully!")
+doc_processor = initialize_rag_system()
 
-# Chat interface
-if st.session_state.document_initialized:
-    st.write("### Chat with the Document")
-    user_input = st.text_input("Ask a question:")
-    if user_input:
-        # Get the answer from the backend
-        answer = st.session_state.qa_system.answer_question(user_input)
+# Directory to store PDFs
+PDF_DIR = "./data"
+os.makedirs(PDF_DIR, exist_ok=True)
 
-        # Update chat history
-        st.session_state.chat_history.append({"question": user_input, "answer": answer})
+# Session state to track uploaded files
+if "uploaded_pdfs" not in st.session_state:
+    st.session_state.uploaded_pdfs = []
 
-        # Display chat history
-        st.write("### Chat History")
-        for chat in st.session_state.chat_history:
-            st.write(f"**You:** {chat['question']}")
-            st.write(f"**Bot:** {chat['answer']}")
-            st.write("---")
-else:
-    st.warning("Please upload a PDF file to start.")
-###########################################################
+# File upload section
+uploaded_files = st.file_uploader("📂 Upload PDF files", type="pdf", accept_multiple_files=True)
+
+if st.button("Index PDFs"):
+    if uploaded_files:
+        for file in uploaded_files:
+            file_path = os.path.join(PDF_DIR, file.name)
+            with open(file_path, "wb") as f:
+                f.write(file.getbuffer())  # Save uploaded file
+
+            # Only index if it's a new upload
+            if file.name not in st.session_state.uploaded_pdfs:
+                doc_processor.store_pdf_in_db(file_path)
+                st.session_state.uploaded_pdfs.append(file.name)  # Track uploaded PDFs
+
+        st.success("✅ PDFs indexed successfully!")
+    else:
+        st.warning("⚠️ Please upload at least one PDF.")
+
+# Show checkboxes for selecting PDFs (only after files are uploaded)
+if st.session_state.uploaded_pdfs:
+    st.write("📑 **Select PDFs to search**")
+    selected_pdfs = []
+    for pdf in st.session_state.uploaded_pdfs:
+        if st.checkbox(pdf, value=True, key=pdf):  # Default: selected
+            selected_pdfs.append(pdf)
+
+    # Question input and search
+    question = st.text_input("❓ Enter your question:")
+    if st.button("Search & Answer"):
+        if not question:
+            st.warning("⚠️ Please enter a question!")
+        elif not selected_pdfs:
+            st.warning("⚠️ Please select at least one PDF to search.")
+        else:
+            answer, source_pdf = doc_processor.answer_question(question, selected_pdfs)
+            st.write(f"**💡 Answer:** {answer}")
+            st.write(f"📄 **Source PDF:** {source_pdf if source_pdf else 'No relevant document found'}")
+
+#
+# # app.py
 # import streamlit as st
-# from transformers import AutoModelForQuestionAnswering, AutoTokenizer
-# from PyPDF2 import PdfReader
-# import torch
-# import faiss
-# import numpy as np
-# from sentence_transformers import SentenceTransformer
+# from doc_qa import DocumentQA
 #
-#
-# # Load the model and tokenizer
-# @st.cache_resource
-# def load_model():
-#     model_name = "bert-base-multilingual-cased"
-#     model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-#     tokenizer = AutoTokenizer.from_pretrained(model_name)
-#     embedder = SentenceTransformer("all-MiniLM-L6-v2")
-#     return model, tokenizer, embedder
-#
-#
-# # Extract text from PDF
-# def extract_text_from_pdf(pdf_file):
-#     reader = PdfReader(pdf_file)
-#     text = ""
-#     for page in reader.pages:
-#         text += page.extract_text()
-#     return text
-#
-#
-# # Split text into chunks
-# def split_text_into_chunks(text, chunk_size=512):
-#     words = text.split()
-#     chunks = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
-#     return chunks
-#
-#
-# # Create FAISS index
-# def create_faiss_index(chunk_embeddings):
-#     dimension = chunk_embeddings.shape[1]
-#     index = faiss.IndexFlatL2(dimension)
-#     index.add(np.array(chunk_embeddings))
-#     return index
-#
-#
-# # Find relevant chunk
-# def find_relevant_chunk(question, embedder, index, text_chunks):
-#     question_embedding = embedder.encode([question])
-#     distances, indices = index.search(question_embedding, k=1)
-#     return text_chunks[indices[0][0]]
-#
-#
-# # Answer question
-# def answer_question(question, model, tokenizer, text_chunks, embedder, index):
-#     relevant_chunk = find_relevant_chunk(question, embedder, index, text_chunks)
-#     inputs = tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True)
-#     outputs = model(**inputs)
-#     answer_start = torch.argmax(outputs.start_logits)
-#     answer_end = torch.argmax(outputs.end_logits) + 1
-#     answer = tokenizer.convert_tokens_to_string(
-#         tokenizer.convert_ids_to_tokens(inputs["input_ids"][0][answer_start:answer_end]))
-#     return answer
-#
+# # Initialize session state
+# if "qa_system" not in st.session_state:
+#     st.session_state.qa_system = DocumentQA()
+#     st.session_state.qa_system.load_model()
+#     st.session_state.chat_history = []
+#     st.session_state.document_initialized = False
 #
 # # Streamlit UI
-# def main():
-#     st.title("Ask your doc :)")
+# st.title("Document Q/A System")
+# st.write("Upload a PDF and ask questions about its content.")
 #
-#     # Upload PDF
-#     pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
-#     if pdf_file is not None:
-#         st.write("PDF uploaded successfully!")
-#         text = extract_text_from_pdf(pdf_file)
-#         text_chunks = split_text_into_chunks(text)
+# # Upload PDF
+# pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
+# if pdf_file is not None and not st.session_state.document_initialized:
+#     st.session_state.qa_system.initialize_document(pdf_file)
+#     st.session_state.document_initialized = True
+#     st.success("PDF uploaded and processed successfully!")
 #
-#         # Load model and embedder
-#         model, tokenizer, embedder = load_model()
+# # Chat interface
+# if st.session_state.document_initialized:
+#     st.write("### Chat with the Document")
+#     user_input = st.text_input("Ask a question:")
+#     if user_input:
+#         # Get the answer from the backend
+#         answer = st.session_state.qa_system.answer_question(user_input)
 #
-#         # Create embeddings and FAISS index
-#         chunk_embeddings = embedder.encode(text_chunks)
-#         index = create_faiss_index(chunk_embeddings)
+#         # Update chat history
+#         st.session_state.chat_history.append({"question": user_input, "answer": answer})
 #
-#         # Question input
-#         question = st.text_input("Ask a question about the document:")
-#         if question:
-#             answer = answer_question(question, model, tokenizer, text_chunks, embedder, index)
-#             st.write(f"**Answer:** {answer}")
-#
-#
-# if __name__ == "__main__":
-#     main()
+#         # Display chat history
+#         st.write("### Chat History")
+#         for chat in st.session_state.chat_history:
+#             st.write(f"**You:** {chat['question']}")
+#             st.write(f"**Bot:** {chat['answer']}")
+#             st.write("---")
+# else:
+#     st.warning("Please upload a PDF file to start.")
+# ###########################################################
+# # import streamlit as st
+# # from transformers import AutoModelForQuestionAnswering, AutoTokenizer
+# # from PyPDF2 import PdfReader
+# # import torch
+# # import faiss
+# # import numpy as np
+# # from sentence_transformers import SentenceTransformer
+# #
+# #
+# # # Load the model and tokenizer
+# # @st.cache_resource
+# # def load_model():
+# #     model_name = "bert-base-multilingual-cased"
+# #     model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+# #     tokenizer = AutoTokenizer.from_pretrained(model_name)
+# #     embedder = SentenceTransformer("all-MiniLM-L6-v2")
+# #     return model, tokenizer, embedder
+# #
+# #
+# # # Extract text from PDF
+# # def extract_text_from_pdf(pdf_file):
+# #     reader = PdfReader(pdf_file)
+# #     text = ""
+# #     for page in reader.pages:
+# #         text += page.extract_text()
+# #     return text
+# #
+# #
+# # # Split text into chunks
+# # def split_text_into_chunks(text, chunk_size=512):
+# #     words = text.split()
+# #     chunks = [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+# #     return chunks
+# #
+# #
+# # # Create FAISS index
+# # def create_faiss_index(chunk_embeddings):
+# #     dimension = chunk_embeddings.shape[1]
+# #     index = faiss.IndexFlatL2(dimension)
+# #     index.add(np.array(chunk_embeddings))
+# #     return index
+# #
+# #
+# # # Find relevant chunk
+# # def find_relevant_chunk(question, embedder, index, text_chunks):
+# #     question_embedding = embedder.encode([question])
+# #     distances, indices = index.search(question_embedding, k=1)
+# #     return text_chunks[indices[0][0]]
+# #
+# #
+# # # Answer question
+# # def answer_question(question, model, tokenizer, text_chunks, embedder, index):
+# #     relevant_chunk = find_relevant_chunk(question, embedder, index, text_chunks)
+# #     inputs = tokenizer(question, relevant_chunk, return_tensors="pt", truncation=True, padding=True)
+# #     outputs = model(**inputs)
+# #     answer_start = torch.argmax(outputs.start_logits)
+# #     answer_end = torch.argmax(outputs.end_logits) + 1
+# #     answer = tokenizer.convert_tokens_to_string(
+# #         tokenizer.convert_ids_to_tokens(inputs["input_ids"][0][answer_start:answer_end]))
+# #     return answer
+# #
+# #
+# # # Streamlit UI
+# # def main():
+# #     st.title("Ask your doc :)")
+# #
+# #     # Upload PDF
+# #     pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
+# #     if pdf_file is not None:
+# #         st.write("PDF uploaded successfully!")
+# #         text = extract_text_from_pdf(pdf_file)
+# #         text_chunks = split_text_into_chunks(text)
+# #
+# #         # Load model and embedder
+# #         model, tokenizer, embedder = load_model()
+# #
+# #         # Create embeddings and FAISS index
+# #         chunk_embeddings = embedder.encode(text_chunks)
+# #         index = create_faiss_index(chunk_embeddings)
+# #
+# #         # Question input
+# #         question = st.text_input("Ask a question about the document:")
+# #         if question:
+# #             answer = answer_question(question, model, tokenizer, text_chunks, embedder, index)
+# #             st.write(f"**Answer:** {answer}")
+# #
+# #
+# # if __name__ == "__main__":
+# #     main()
